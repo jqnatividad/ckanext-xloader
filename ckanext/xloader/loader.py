@@ -33,7 +33,7 @@ except ImportError:
     from pylons import config
 
 import ckan.plugins as p
-from job_exceptions import LoaderError
+from job_exceptions import LoaderError, FileCouldNotBeLoadedError
 
 MAX_COLUMN_LENGTH = 63
 
@@ -56,6 +56,8 @@ def load_csv(csv_filepath, resource_id, mimetype='text/csv', logger=None):
             #                                          extension=format)
             # except Exception:
                 raise LoaderError('Messytables error: {}'.format(e))
+        except Exception as e:
+            raise FileCouldNotBeLoadedError(e)
 
         if not table_set.tables:
             raise LoaderError('Could not detect tabular data in this file')
@@ -63,7 +65,7 @@ def load_csv(csv_filepath, resource_id, mimetype='text/csv', logger=None):
         header_offset, headers = messytables.headers_guess(row_set.sample)
 
     # Some headers might have been converted from strings to floats and such.
-    headers = [unidecode(header) for header in headers]
+    headers = encode_headers(headers)
 
     # Guess the delimiter used in the file
     with open(csv_filepath, 'r') as f:
@@ -72,7 +74,7 @@ def load_csv(csv_filepath, resource_id, mimetype='text/csv', logger=None):
         sniffer = csv.Sniffer()
         delimiter = sniffer.sniff(header_line).delimiter
     except csv.Error:
-        logger.error('Could not determine delimiter from file, use default ","')
+        logger.warning('Could not determine delimiter from file, use default ","')
         delimiter = ','
 
     # Setup the converters that run when you iterate over the row_set.
@@ -216,9 +218,13 @@ def load_csv(csv_filepath, resource_id, mimetype='text/csv', logger=None):
                                 ),
                             f)
                     except psycopg2.DataError as e:
-                        logger.error(e)
+                        # e is a str but with foreign chars e.g.
+                        # 'extra data: "paul,pa\xc3\xbcl"\n'
+                        # but logging and exceptions need a normal (7 bit) str
+                        error_str = str(e).decode('ascii', 'replace').encode('ascii', 'replace')
+                        logger.warning(error_str)
                         raise LoaderError('Error during the load into PostgreSQL:'
-                                          ' {}'.format(e))
+                                          ' {}'.format(error_str))
 
             finally:
                 cur.close()
@@ -292,7 +298,7 @@ def load_table(table_filepath, resource_id, mimetype='text/csv', logger=None):
                 for f in existing.get('fields', []) if 'info' in f)
 
         # Some headers might have been converted from strings to floats and such.
-        headers = [unidecode(header) for header in headers]
+        headers = encode_headers(headers)
 
         row_set.register_processor(messytables.headers_processor(headers))
         row_set.register_processor(messytables.offset_processor(offset + 1))
@@ -391,6 +397,17 @@ def get_types():
     #TYPES = web.app.config.get('TYPES', _TYPES)
     TYPE_MAPPING = config.get('TYPE_MAPPING', _TYPE_MAPPING)
     return _TYPES, TYPE_MAPPING
+
+
+def encode_headers(headers):
+    encoded_headers = []
+    for header in headers:
+        try:
+            encoded_headers.append(unidecode(header))
+        except AttributeError:
+            encoded_headers.append(unidecode(str(header)))
+
+    return encoded_headers
 
 
 def chunky(iterable, n):
@@ -508,6 +525,19 @@ def _populate_fulltext(connection, resource_id, fields):
                 )
             )
     connection.execute(sql)
+
+
+def calculate_record_count(resource_id, logger):
+    '''
+    Calculate an estimate of the record/row count and store it in
+    Postgresql's pg_stat_user_tables. This number will be used when
+    specifying `total_estimation_threshold`
+    '''
+    logger.info('Calculating record count (running ANALYZE on the table)')
+    engine = get_write_engine()
+    conn = engine.connect()
+    conn.execute("ANALYZE \"{resource_id}\";"
+                 .format(resource_id=resource_id))
 
 
 ################################

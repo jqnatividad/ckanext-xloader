@@ -2,8 +2,8 @@
    these badges work. The necessary Travis and Coverage config files have been
    generated for you.
 
-.. image:: https://travis-ci.org/davidread/ckanext-xloader.svg?branch=master
-    :target: https://travis-ci.org/davidread/ckanext-xloader
+.. image:: https://travis-ci.org/ckan/ckanext-xloader.svg?branch=master
+    :target: https://travis-ci.org/ckan/ckanext-xloader
 
 .. image:: https://img.shields.io/pypi/v/ckanext-xloader.svg
     :target: https://pypi.python.org/pypi/ckanext-xloader/
@@ -40,7 +40,7 @@ DataPusher - parses CSV rows, converts to detected column types, converts the da
 
 Express Loader - pipes the CSV file directly into PostgreSQL using COPY.
 
-In `tests <https://github.com/davidread/ckanext-xloader/issues/25>`_, Express Loader is over ten times faster than DataPusher.
+In `tests <https://github.com/ckan/ckanext-xloader/issues/25>`_, Express Loader is over ten times faster than DataPusher.
 
 Robustness
 ----------
@@ -69,7 +69,6 @@ Caveats
 -------
 
 * All columns are loaded as 'text' type. However an admin can use the resource's Data Dictionary tab (CKAN 2.7 onwards) to change these to numeric or datestamp and re-load the file. There is scope to do this automatically in future.
-* No support yet for private datasets
 
 
 ------------
@@ -113,9 +112,9 @@ To install Express Loader:
      ALTER FUNCTION
 
    NB this assumes you used the defaults for the database name and username.
-   If in doubt, check your config's ckan.datastore.write_url. If you don't have
+   If in doubt, check your config's ``ckan.datastore.write_url``. If you don't have
    database name ``datastore_default`` and username ``ckan_default`` then adjust
-   the psql option and full_text_function.sql before running this.
+   the psql option and ``full_text_function.sql`` before running this.
 
 5. Add ``xloader`` to the ``ckan.plugins`` setting in your CKAN
    config file (by default the config file is located at
@@ -194,6 +193,17 @@ Configuration:
     # False (default), resources are only submitted if their hash has changed.
     ckanext.xloader.ignore_hash = False
 
+    # When loading a file that is bigger than `max_content_length`, xloader can
+    # still try and load some of the file, which is useful to display a
+    # preview. Set this option to the desired number of lines/rows that it
+    # loads in this case.
+    # If the file-type is supported (CSV, TSV) an excerpt with the number of
+    # `max_excerpt_lines` lines will be submitted while the `max_content_length` 
+    # is not exceeded.
+    # If set to 0 (default) files that exceed the `max_content_length` will
+    # not be loaded into the datastore.
+    ckanext.xloader.max_excerpt_lines = 100
+
 ------------------------
 Development Installation
 ------------------------
@@ -201,7 +211,7 @@ Development Installation
 To install Express Loader for development, activate your CKAN virtualenv and
 in the directory up from your local ckan repo::
 
-    git clone https://github.com/davidread/ckanext-xloader.git
+    git clone https://github.com/ckan/ckanext-xloader.git
     cd ckanext-xloader
     python setup.py develop
     pip install -r requirements.txt
